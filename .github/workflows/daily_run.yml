@@ -1,0 +1,35 @@
+name: Daily Market Data Fetch
+
+on:
+  schedule:
+    # 每天週二至週六的凌晨 06:15 執行 (對應美股收盤後的台灣/香港時間)
+    - cron: '15 22 * * 1-5'
+  workflow_dispatch: # 保留這個按鈕，讓你可以隨時手動點擊執行
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 複製專案程式碼
+      uses: actions/checkout@v3
+
+    - name: 設定 Python 環境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: 安裝 pip 套件 (這裡就是執行 pip install)
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 執行爬蟲程式並產生 CSV
+      run: python scanner.py
+
+    - name: 將產生的 CSV 檔案自動存回 GitHub
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add market_data_*.csv
+        git commit -m "自動更新每日美股數據: $(date +'%Y-%m-%d')" || exit 0
+        git push
