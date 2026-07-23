@@ -4,7 +4,16 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-# 填入你的免費 FMP API Key (於 financialmodelingprep.com 申請)
+# =====================================================================
+# 📌 1. 修改持股請看這裡！
+# 你可以在這個清單內「自由增減」你想追蹤的個股或 ETF 代號（記得用雙引號與逗號隔開）
+# =====================================================================
+watchlist = ["MU", "TSM", "SOXQ", "VOO", "BRK.B", "XLV"]
+
+# 📌 固定輸出的總數據庫檔名
+OUTPUT_FILENAME = "my_holdings_history.csv"
+
+# FMP API Key (自動抓取 GitHub 保險箱)
 FMP_API_KEY = os.environ.get("FMP_API_KEY", "YOUR_FMP_API_KEY")
 
 
@@ -83,26 +92,26 @@ def fetch_stock_data(ticker):
         print(f"⚠️ 找不到 {ticker} 的歷史數據")
         return None
 
-    # 技術指標計算
+    # 純 Pandas 技術指標計算 (免第三方庫)
     df["20MA"] = df["Close"].rolling(window=20).mean()
     df["50MA"] = df["Close"].rolling(window=50).mean()
     df["30VolMA"] = df["Volume"].rolling(window=30).mean()
-    
-    # 純 Pandas 計算標準 RSI(14)
+
     delta = df["Close"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     df["RSI14"] = 100 - (100 / (1 + rs))
 
-
     latest = df.iloc[-1]
     prev_close = df.iloc[-2]["Close"]
     fib_levels, fib_anchors = calculate_fibonacci(df)
     fast_info = stock.fast_info
 
-    # 建立統欄位字典
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+
     data = {
+        "資料日期": today_str,  # ⭐ 新增日期欄位，防止合併後混淆
         "標的代號": ticker,
         "類型": "ETF" if is_etf else "個股",
         "開市價": round(latest["Open"], 2),
@@ -134,7 +143,6 @@ def fetch_stock_data(ticker):
         "Fib 50.0%": round(fib_levels["50.0%"], 2),
         "Fib 61.8%": round(fib_levels["61.8%"], 2),
         "Fib 78.6%": round(fib_levels["78.6%"], 2),
-        # 以下欄位將根據類型動態填入
         "下次財報日": "N/A",
         "共識EPS": "N/A",
         "上季財報Beat/Miss": "N/A",
@@ -189,25 +197,33 @@ def fetch_stock_data(ticker):
 
 
 if __name__ == "__main__":
-    # 📌 1. 在這裡輸入你每天想要抓取的標的清單 (可自由增減個股或ETF)
-    watchlist = ["AAPL", "NVDA", "TSLA", "QQQ", "SPY"]
-
-    results = []
+    new_results = []
     for ticker in watchlist:
         stock_data = fetch_stock_data(ticker)
         if stock_data:
-            results.append(stock_data)
+            new_results.append(stock_data)
 
-    # 📌 2. 轉為 Pandas DataFrame
-    final_df = pd.DataFrame(results)
+    current_df = pd.DataFrame(new_results)
 
-    # 📌 3. 設定儲存檔名 (加上當天日期，防止舊檔案被覆蓋)
-    today_str = datetime.date.today().strftime("%Y-%m-%d")
-    output_filename = f"market_data_{today_str}.csv"
+    # 📌 2. 核心邏輯：自動讀取舊檔並 Append 新數據
+    if os.path.exists(OUTPUT_FILENAME):
+        try:
+            # 讀取現有的歷史數據
+            old_df = pd.read_csv(OUTPUT_FILENAME)
+            # 將今天的新數據合併到舊數據的下方
+            final_df = pd.concat([old_df, current_df], ignore_index=True)
+            # 移除可能重複抓取的同一天同一檔標的（防呆機制）
+            final_df.drop_duplicates(
+                subset=["資料日期", "標的代號"], keep="last", inplace=True
+            )
+            print("==== 成功讀取舊有數據庫，已完成新增（Append） ====")
+        except Exception as e:
+            print(f"⚠️ 讀取舊檔案失敗 ({e})，將重新建立新檔案。")
+            final_df = current_df
+    else:
+        print("==== 找不到舊檔案，正在建立全新的數據庫 ====")
+        final_df = current_df
 
-    # 📌 4. 導出為 CSV (使用 utf-8-sig 確保中文在 Excel 中開啟不亂碼)
-    final_df.to_csv(output_filename, index=False, encoding="utf-8-sig")
-
-    print(f"\n======================================")
-    print(f"🎉 數據抓取完成！已成功儲存至檔案: {os.path.abspath(output_filename)}")
-    print(f"======================================")
+    # 📌 3. 儲存為固定的 CSV 檔案名稱 (此網址之後在外部調用將永遠不變)
+    final_df.to_csv(OUTPUT_FILENAME, index=False, encoding="utf-8-sig")
+    print(f"🎉 歷史數據合併完成！儲存路徑: {os.path.abspath(OUTPUT_FILENAME)}")
