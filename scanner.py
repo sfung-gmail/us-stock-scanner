@@ -5,7 +5,7 @@ import requests
 import yfinance as yf
 
 # 填入你的免費 FMP API Key (於 financialmodelingprep.com 申請)
-FMP_API_KEY = "YOUR_FMP_API_KEY"
+FMP_API_KEY = os.environ.get("FMP_API_KEY", "YOUR_FMP_API_KEY")
 
 
 def get_fmp_earnings(ticker):
