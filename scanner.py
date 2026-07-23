@@ -8,7 +8,7 @@ import yfinance as yf
 # 📌 1. 修改持股請看這裡！
 # 你可以在這個清單內「自由增減」你想追蹤的個股或 ETF 代號（記得用雙引號與逗號隔開）
 # =====================================================================
-watchlist = ["MU", "TSM", "SOXQ", "VOO", "BRK.B", "XLV"]
+watchlist = ["MU", "TSM", "SOXQ", "VOO", "BRK-B", "XLV"]
 
 # 📌 固定輸出的總數據庫檔名
 OUTPUT_FILENAME = "my_holdings_history.csv"
