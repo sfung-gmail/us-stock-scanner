@@ -33,6 +33,7 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add market_data_*.csv
-        git commit -m "自動更新每日美股數據: $(date +'%Y-%m-%d')" || exit 0
+        # ⚙️ 這裡改成指定追蹤這個固定的歷史歷史總表
+        git add all_market_history.csv
+        git commit -m "自動追加每日美股數據歷史: $(date +'%Y-%m-%d')" || exit 0
         git push
