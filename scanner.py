@@ -1,7 +1,6 @@
 import datetime
 import os
 import pandas as pd
-import pandas_ta as ta
 import requests
 import yfinance as yf
 
@@ -85,12 +84,6 @@ def fetch_stock_data(ticker):
         return None
 
     # 技術指標計算
-    #df["20MA"] = ta.sma(df["Close"], length=20)
-    #df["50MA"] = ta.sma(df["Close"], length=50)
-    #df["30VolMA"] = ta.sma(df["Volume"], length=30)
-    #df["RSI14"] = ta.rsi(df["Close"], length=14)
-    
-    #  替換為這段代碼：
     df["20MA"] = df["Close"].rolling(window=20).mean()
     df["50MA"] = df["Close"].rolling(window=50).mean()
     df["30VolMA"] = df["Volume"].rolling(window=30).mean()
