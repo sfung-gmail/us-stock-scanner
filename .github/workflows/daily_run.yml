@@ -24,6 +24,9 @@ jobs:
         pip install -r requirements.txt
 
     - name: 執行爬蟲程式並產生 CSV
+      env:
+        # 🔑 把 GitHub 的保險箱密碼，變成 Python 看得見的系統變數
+        FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
       run: python scanner.py
 
     - name: 將產生的 CSV 檔案自動存回 GitHub
