@@ -9,6 +9,8 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    permissions: # 🛡️ 確保自動執行時 git push 不會因為權限問題變紅叉
+      contents: write
     steps:
     - name: 複製專案程式碼
       uses: actions/checkout@v3
