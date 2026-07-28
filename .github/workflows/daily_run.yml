@@ -2,8 +2,9 @@ name: Daily Market Data Fetch
 
 on:
   schedule:
-    # ⚙️ 00:43 UTC = 08:43 AM 香港時間 | 2-6 代表週二至週六
-    - cron: '43 0 * * 2-6'
+    # ⚙️ 23:12 UTC = 香港時間週二至週六的早上 07:12 AM 執行
+    # 完美避開 08:30 財經機器人大塞車，且夏冬令皆已完成清算
+    - cron: '12 23 * * 1-5'
   workflow_dispatch: # 保留這個按鈕，讓你可以隨時手動點擊執行
 
 jobs:
