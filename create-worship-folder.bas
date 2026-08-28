@@ -6,8 +6,8 @@ Const msoTrue = -1
 Const ppAutoSizeNone = 0
 Const msoAutoSizeNone = 0
 
-Const MAX_CHARS_PER_SLIDE = 140
-Const MAX_LINES_PER_SLIDE = 4
+Const MAX_CHARS_PER_SLIDE = 110
+Const MAX_LINES_PER_SLIDE = 6
 
 Const MAX_SEARCH_YEAR = 2100
 Const MIN_SEARCH_YEAR = 2010
@@ -629,7 +629,8 @@ Function ReplaceAllExactText( _
     ByVal replacement _
 )
 
-    Dim i, shapeObject
+    Dim i
+    Dim shapeObject
     Dim replacementCount
     Dim isScriptureText
 
@@ -637,24 +638,32 @@ Function ReplaceAllExactText( _
     isScriptureText = (placeholder = "{{SCRIPTURE_TEXT}}")
 
     For i = 1 To slideObject.Shapes.Count
+
         On Error Resume Next
 
         Set shapeObject = slideObject.Shapes(i)
 
         If shapeObject.HasTextFrame = msoTrue Then
+
             If Trim(shapeObject.TextFrame.TextRange.Text) = placeholder Then
 
+                ' For scripture text, stop PowerPoint from shrinking
+                ' the text box to the original placeholder height.
                 If isScriptureText Then
                     shapeObject.TextFrame.AutoSize = ppAutoSizeNone
                     shapeObject.TextFrame2.AutoSize = msoAutoSizeNone
                     shapeObject.TextFrame.VerticalAnchor = 1
                 End If
 
+                ' The paragraph settings saved in the template are retained.
+                ' Set the hanging indent directly in both template PPTX files:
+                ' Before text: 1.4 cm
+                ' Special: Hanging
+                ' By: 1.4 cm
                 shapeObject.TextFrame.TextRange.Text = replacement
 
+                ' PowerPoint may reset AutoFit after assigning text.
                 If isScriptureText Then
-                    ApplyScriptureHangingIndent shapeObject
-
                     shapeObject.TextFrame.AutoSize = ppAutoSizeNone
                     shapeObject.TextFrame2.AutoSize = msoAutoSizeNone
                     shapeObject.TextFrame.VerticalAnchor = 1
@@ -670,46 +679,6 @@ Function ReplaceAllExactText( _
 
     ReplaceAllExactText = replacementCount
 End Function
-
-' ===============================================================
-' Scripture hanging indent
-' ===============================================================
-
-Sub ApplyScriptureHangingIndent(ByVal shapeObject)
-
-    Const HANGING_INDENT_POINTS = 55
-
-    Dim paragraphIndex
-    Dim paragraphCount
-    Dim paragraphRange
-
-    On Error Resume Next
-
-    paragraphCount = _
-        shapeObject.TextFrame.TextRange.Paragraphs.Count
-
-    For paragraphIndex = 1 To paragraphCount
-
-        Set paragraphRange = _
-            shapeObject.TextFrame.TextRange.Paragraphs( _
-                paragraphIndex, _
-                1 _
-            )
-
-        ' Required: no bullets in scripture paragraphs.
-        paragraphRange.ParagraphFormat.Bullet.Visible = msoFalse
-
-        ' PowerPoint's safe indent method:
-        ' positive value shifts the complete paragraph right,
-        ' negative value brings only the first line back left.
-        paragraphRange.ParagraphFormat.Indent _
-            HANGING_INDENT_POINTS, _
-            -HANGING_INDENT_POINTS
-    Next
-
-    Err.Clear
-    On Error GoTo 0
-End Sub
 
 Function MakePageBreaks( _
     ByRef lines, _
@@ -853,7 +822,11 @@ End Function
 
 Function JoinLines(ByRef values, ByVal firstIndex, ByVal lastIndex)
 
-    Dim i, result
+    Dim i
+    Dim result
+    Dim currentLine
+    Dim closingBracketPosition
+    Dim verseNumberText
 
     result = ""
 
@@ -863,11 +836,46 @@ Function JoinLines(ByRef values, ByVal firstIndex, ByVal lastIndex)
     End If
 
     For i = firstIndex To lastIndex
+
+        currentLine = values(i)
+
+        ' Expected scripture line format:
+        ' [1] text
+        ' [16] text
+        '
+        ' If the verse number has one digit, add one extra space
+        ' after ] so it aligns with a two-digit verse number.
+        If Left(currentLine, 1) = "[" Then
+
+            closingBracketPosition = InStr(currentLine, "]")
+
+            If closingBracketPosition > 2 Then
+
+                verseNumberText = Mid( _
+                    currentLine, _
+                    2, _
+                    closingBracketPosition - 2 _
+                )
+
+                If IsNumeric(verseNumberText) And _
+                   Len(verseNumberText) = 1 Then
+
+                    currentLine = Left( _
+                        currentLine, _
+                        closingBracketPosition _
+                    ) & " " & Mid( _
+                        currentLine, _
+                        closingBracketPosition + 1 _
+                    )
+                End If
+            End If
+        End If
+
         If result <> "" Then
             result = result & vbCrLf
         End If
 
-        result = result & values(i)
+        result = result & currentLine
     Next
 
     JoinLines = result
@@ -898,6 +906,7 @@ Function CreateCallResponsePpt( _
     Dim pres, pairIndex, slideObject
     Dim duplicateRange
     Dim detailError
+    Dim callResponseText
 
     CreateCallResponsePpt = False
     errorMessage = ""
@@ -948,8 +957,7 @@ Function CreateCallResponsePpt( _
         Exit Function
     End If
 
-    ' If [啟應] exists, create one 啟應 slide per complete pair.
-    ' Duplicate the original slide 2 before deleting any slide.
+    ' Create one 啟應 slide per pair.
     If hasCallResponse Then
         For pairIndex = 2 To pairCount
             Set duplicateRange = pres.Slides(2).Duplicate
@@ -957,8 +965,7 @@ Function CreateCallResponsePpt( _
         Next
     End If
 
-    ' Write [宣召] text only if the section has usable content.
-    ' Its empty lines are already preserved by ReadCallResponseFile.
+    ' Slide 1: 宣召.
     If hasCallScripture Then
         detailError = ""
 
@@ -976,50 +983,35 @@ Function CreateCallResponsePpt( _
         End If
     End If
 
-    ' Write each 啟 / 應 pair.
+    ' Slides 2 onward: one full 啟 / 應 pair per slide.
     If hasCallResponse Then
         For pairIndex = 1 To pairCount
+
             Set slideObject = pres.Slides(pairIndex + 1)
+
+            callResponseText = _
+                CNCallPrefix() & callLines(pairIndex) & vbCrLf & vbCrLf & _
+                CNResponsePrefix() & responseLines(pairIndex)
+
             detailError = ""
 
-            If Not SetTextInNamedShape( _
+            If Not SetCallResponseText( _
                 slideObject, _
-                "CALL_1", _
-                callLines(pairIndex), _
+                "CALL_RESPONSE_1", _
+                callResponseText, _
+                Len(CNCallPrefix() & callLines(pairIndex) & vbCrLf), _
                 detailError _
             ) Then
                 pres.Close
                 errorMessage = MsgTemplateMissingNamedShape( _
-                    "CALL_1" _
-                ) & vbCrLf & detailError
-                Exit Function
-            End If
-
-            detailError = ""
-
-            If Not SetTextInNamedShape( _
-                slideObject, _
-                "RESPONSE_1", _
-                responseLines(pairIndex), _
-                detailError _
-            ) Then
-                pres.Close
-                errorMessage = MsgTemplateMissingNamedShape( _
-                    "RESPONSE_1" _
+                    "CALL_RESPONSE_1" _
                 ) & vbCrLf & detailError
                 Exit Function
             End If
         Next
     End If
 
-    ' Remove unused template slide(s).
-    '
-    ' If only [啟應] exists:
-    ' - template slide 1 is deleted;
-    ' - original template slide 2 becomes the first output slide.
-    '
-    ' If only [宣召] exists:
-    ' - template slide 2 is deleted.
+    ' Remove unused template slides.
     If Not hasCallResponse Then
         pres.Slides(2).Delete
     End If
@@ -1046,7 +1038,6 @@ Function CreateCallResponsePpt( _
 
     CreateCallResponsePpt = True
 End Function
-
 
 ' Gets a text box by its exact PowerPoint Selection Pane name and
 ' replaces all its text. It does not search for placeholder strings.
@@ -1099,6 +1090,78 @@ Function SetTextInNamedShape( _
     On Error GoTo 0
 
     SetTextInNamedShape = True
+End Function
+
+' Writes one full 啟 / 應 pair into CALL_RESPONSE_1.
+' The complete 應： line becomes purple.
+Function SetCallResponseText( _
+    ByVal slideObject, _
+    ByVal shapeName, _
+    ByVal replacement, _
+    ByVal responseStartPosition, _
+    ByRef errorMessage _
+)
+
+    Const PURPLE_RED = 112
+    Const PURPLE_GREEN = 48
+    Const PURPLE_BLUE = 160
+
+    Dim shapeObject
+    Dim responseLength
+
+    SetCallResponseText = False
+    errorMessage = ""
+
+    On Error Resume Next
+
+    Set shapeObject = slideObject.Shapes(shapeName)
+
+    If Err.Number <> 0 Or shapeObject Is Nothing Then
+        errorMessage = MsgNamedShapeNotFound(shapeName)
+        Err.Clear
+        On Error GoTo 0
+        Exit Function
+    End If
+
+    If shapeObject.HasTextFrame <> msoTrue Then
+        errorMessage = MsgNamedShapeNoText(shapeName)
+        On Error GoTo 0
+        Exit Function
+    End If
+
+    shapeObject.TextFrame.AutoSize = ppAutoSizeNone
+    shapeObject.TextFrame2.AutoSize = msoAutoSizeNone
+    shapeObject.TextFrame.VerticalAnchor = 1
+
+    shapeObject.TextFrame.TextRange.Text = replacement
+
+    ' responseStartPosition includes the line break, therefore the
+    ' response line starts at this character position.
+    responseLength = Len(replacement) - responseStartPosition + 1
+
+    shapeObject.TextFrame.TextRange.Characters( _
+        responseStartPosition, _
+        responseLength _
+    ).Font.Color.RGB = RGB( _
+        PURPLE_RED, _
+        PURPLE_GREEN, _
+        PURPLE_BLUE _
+    )
+
+    shapeObject.TextFrame.AutoSize = ppAutoSizeNone
+    shapeObject.TextFrame2.AutoSize = msoAutoSizeNone
+    shapeObject.TextFrame.VerticalAnchor = 1
+
+    If Err.Number <> 0 Then
+        errorMessage = Err.Description
+        Err.Clear
+        On Error GoTo 0
+        Exit Function
+    End If
+
+    On Error GoTo 0
+
+    SetCallResponseText = True
 End Function
 
 ' ===============================================================
